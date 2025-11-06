@@ -14,8 +14,8 @@ from grounding_dino.groundingdino.util.inference import load_model, load_image, 
 """
 Hyper parameters
 """
-TEXT_PROMPT = "car. tire."
-IMG_PATH = "notebooks/images/truck.jpg"
+TEXT_PROMPT = "road. sidewalk. car. cyclist. building. sky. bicycle."
+IMG_PATH = "demo_images/frame_3950_1730815307.411684.png"
 SAM2_CHECKPOINT = "./checkpoints/sam2.1_hiera_large.pt"
 SAM2_MODEL_CONFIG = "configs/sam2.1/sam2.1_hiera_l.yaml"
 GROUNDING_DINO_CONFIG = "grounding_dino/groundingdino/config/GroundingDINO_SwinT_OGC.py"
@@ -127,11 +127,11 @@ annotated_frame = box_annotator.annotate(scene=img.copy(), detections=detections
 
 label_annotator = sv.LabelAnnotator()
 annotated_frame = label_annotator.annotate(scene=annotated_frame, detections=detections, labels=labels)
-cv2.imwrite(os.path.join(OUTPUT_DIR, "groundingdino_annotated_image.jpg"), annotated_frame)
+cv2.imwrite(os.path.join(OUTPUT_DIR, "3950groundingdino_annotated_image.jpg"), annotated_frame)
 
 mask_annotator = sv.MaskAnnotator()
 annotated_frame = mask_annotator.annotate(scene=annotated_frame, detections=detections)
-cv2.imwrite(os.path.join(OUTPUT_DIR, "grounded_sam2_annotated_image_with_mask.jpg"), annotated_frame)
+cv2.imwrite(os.path.join(OUTPUT_DIR, "3950grounded_sam2_annotated_image_with_mask.jpg"), annotated_frame)
 
 """
 Dump the results in standard format and save as json files
@@ -165,5 +165,5 @@ if DUMP_JSON_RESULTS:
         "img_height": h,
     }
     
-    with open(os.path.join(OUTPUT_DIR, "grounded_sam2_local_image_demo_results.json"), "w") as f:
+    with open(os.path.join(OUTPUT_DIR, "3950grounded_sam2_local_image_demo_results.json"), "w") as f:
         json.dump(results, f, indent=4)
