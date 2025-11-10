@@ -19,9 +19,20 @@ import sys
 IMG_INPUT_DIR = "robotcycle/img_in/"
 JSON_DIR = "robotcycle/gs2_json_out/"
 IMG_MASK_OUT_DIR = "robotcycle/gs2_img_out/"
-IMG_OUT_DIR = "robotcycle/img_out4/"
-CSV_IN_PATH = "robotcycle/gaze_csv/gaze-projection-timestamped.csv"
-CSV_OUT_PATH = "robotcycle/gaze_csv/gaze-projection-annotated.csv"
+IMG_OUT_DIR = "robotcycle/img_out9/"
+CSV_IN_PATH = "robotcycle/gaze_csv/adjusted_points_v3sample2.csv"
+CSV_OUT_PATH = "robotcycle/gaze_csv/adjusted_points_v3sample2ann.csv"
+POINT_RADIUS = 10  # radius around gaze point to consider for annotation
+MAX_IMAGES = 90  # Set the maximum number of images to process
+TIME_START = 1730815570.0  # starting timestamp (inclusive)
+TIME_END = 9999999999.0  # ending timestamp (inclusive)
+HEATMAP_PATH = "robotcycle/heatmaps1/"
+HEATMAP_ALPHA = 0.3
+SAVE_HEATMAP_PNG = False
+
+# categories in decreasing priority order
+CATEGORIES = ["cyclist", "pedestrian", "traffic sign", "car", "bus", "vehicle", "sidewalk", "road", "building", "tree", "sky"]
+TEXT_PROMPT = ". ".join([f"{cat}." for cat in CATEGORIES])
 
 # Redirect terminal outputs to a log file (robust)
 os.makedirs(IMG_OUT_DIR, exist_ok=True)
@@ -43,7 +54,6 @@ def get_segments(timestamp):
     """
 
     # Hyper parameters
-    TEXT_PROMPT = "road. sidewalk. car. bus. pedestrian. cyclist. traffic sign. vehicle."
     img_path = Path(f"{IMG_INPUT_DIR}{timestamp}.png")
     SAM2_CHECKPOINT = "./checkpoints/sam2.1_hiera_large.pt"
     SAM2_MODEL_CONFIG = "configs/sam2.1/sam2.1_hiera_l.yaml"
@@ -231,9 +241,18 @@ def query_point_annotations(json_path, x, y):
 def get_best_annotation(timestamp, x, y):
     """
     Given a timestamp and point (x, y), returns the best matching annotation.
+    Will query all points within a radius around (x, y).
+    Returns the class_name of the highest priority match, or "None" if no match.
     """
     json_path = f"{JSON_DIR}{timestamp}.json"
-    matches = query_point_annotations(json_path, x, y)
+    points_to_check = []
+    for dx in range(-POINT_RADIUS, POINT_RADIUS + 1):
+        for dy in range(-POINT_RADIUS, POINT_RADIUS + 1):
+            if dx*dx + dy*dy <= POINT_RADIUS*POINT_RADIUS:
+                points_to_check.append((x + dx, y + dy))
+    matches = []
+    for px, py in points_to_check:
+        matches.extend(query_point_annotations(json_path, px, py))
     if matches:
         return matches[0]['class_name']
     else:
@@ -251,10 +270,61 @@ def annotate_image(timestamp, x, y, best_annotation):
     if img is None:
         raise FileNotFoundError(f"Image not found at {img_path}")
 
+    # Load the heatmap
+    # Load and overlay heatmap if available
+    heatmap_file = os.path.join(HEATMAP_PATH, f"{timestamp}.npy")
+    if os.path.exists(heatmap_file):
+        try:
+            heat = np.load(heatmap_file)  # expected 2D array of values
+            if heat is None:
+                raise ValueError("Loaded heatmap is None")
+
+            # Ensure 2D
+            if heat.ndim > 2:
+                heat = np.squeeze(heat)
+            if heat.ndim != 2:
+                raise ValueError(f"Heatmap must be 2D, got ndim={heat.ndim}")
+
+            # Resize heatmap to image size if necessary
+            img_h, img_w = img.shape[:2]
+            if (heat.shape[0], heat.shape[1]) != (img_h, img_w):
+                heat_resized = cv2.resize(heat.astype(np.float32), (img_w, img_h), interpolation=cv2.INTER_LINEAR)
+            else:
+                heat_resized = heat.astype(np.float32)
+
+            # Normalize to 0-255
+            mn, mx = float(np.nanmin(heat_resized)), float(np.nanmax(heat_resized))
+            if np.isclose(mx, mn):
+                heat_norm = np.zeros_like(heat_resized, dtype=np.uint8)
+            else:
+                heat_norm = np.clip((heat_resized - mn) / (mx - mn) * 255.0, 0, 255).astype(np.uint8)
+
+            # Apply a colormap
+            heat_color = cv2.applyColorMap(heat_norm, cv2.COLORMAP_HOT)  # BGR
+
+            # Blend heatmap with image
+            alpha = float(HEATMAP_ALPHA)
+            img = cv2.addWeighted(img, 1.0 - alpha, heat_color, alpha, 0)
+
+            # Optionally save a visualization of the heatmap alone
+            if SAVE_HEATMAP_PNG:
+                try:
+                    heat_vis_path = os.path.join(HEATMAP_PATH, f"{timestamp}_heatmap.png")
+                    cv2.imwrite(heat_vis_path, heat_color)
+                except Exception:
+                    pass
+
+        except Exception:
+            # If anything goes wrong loading/processing heatmap, continue without overlay
+            pass
+    else:
+        # No heatmap file found; continue without overlay
+        pass
+
     # Draw the point on the image
-    color = (0, 0, 255)  # Red color in BGR
-    radius = 7
-    thickness = -1  # Filled circle
+    color = (0, 255, 0)  # Green color in BGR
+    radius = POINT_RADIUS
+    thickness = 2
     cv2.circle(img, (x, y), radius, color, thickness)
 
     # Add timestamp and best annotation text
@@ -325,7 +395,6 @@ with open(CSV_IN_PATH, "r") as f:
     gaze_data = {row["timestamp"]: (float(row["projection_point_x"]), float(row["projection_point_y"]), "None") for row in reader}
 
 # Process each image in IMG_INPUT_DIR
-MAX_IMAGES = 1010  # Set the maximum number of images to process
 processed_count = 0
 
 # iterate images in numerically ascending order (falls back to float/int parse, then string)
@@ -347,6 +416,10 @@ try:
             break
 
         timestamp = os.path.splitext(img_file)[0]
+        t_float = float(timestamp)
+        if t_float < TIME_START or t_float > TIME_END:
+            continue
+
         print(f"Processing image {img_file} ({processed_count + 1} out of {MAX_IMAGES})")
         # print(f"Processing image {img_file} ({processed_count + 1} out of {MAX_IMAGES})", end="")
 
