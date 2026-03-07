@@ -15,6 +15,10 @@ ENV LD_LIBRARY_PATH=/usr/local/cuda-11.7/lib64:${LD_LIBRARY_PATH}
 # ENV PATH=/usr/local/cuda-12.1/bin:${PATH}
 # ENV LD_LIBRARY_PATH=/usr/local/cuda-12.1/lib64:${LD_LIBRARY_PATH}
 
+# Prevent interactive prompts during apt-get (tzdata, etc.)
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=Europe/London
+
 # Install required packages and specific gcc/g++
 RUN apt-get update && apt-get install --no-install-recommends wget ffmpeg=7:* \
     libsm6=2:* libxext6=2:* git=1:* nano vim=2:* ninja-build gcc-10 g++-10 -y \
