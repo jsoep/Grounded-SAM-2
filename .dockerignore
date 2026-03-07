@@ -1,0 +1,21 @@
+# Model checkpoints (mount at runtime instead of baking into image)
+checkpoints/
+gdino_checkpoints/
+
+# Git
+.git/
+
+# Demo files not needed for inference
+demo/
+demo_images/
+notebooks/
+assets/
+
+# Build artifacts
+__pycache__/
+*.pyc
+*.egg-info/
+
+# Output directories
+robotcycle/
+tracking_results/
