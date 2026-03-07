@@ -19,11 +19,11 @@ import sys
 IMG_INPUT_DIR = "robotcycle/img_in/"
 JSON_DIR = "robotcycle/gs2_json_out/"
 IMG_MASK_OUT_DIR = "robotcycle/gs2_img_out/"
-IMG_OUT_DIR = "robotcycle/img_out9/"
+IMG_OUT_DIR = "robotcycle/img_out10_test_cuda/"
 CSV_IN_PATH = "robotcycle/gaze_csv/adjusted_points_v3sample2.csv"
 CSV_OUT_PATH = "robotcycle/gaze_csv/adjusted_points_v3sample2ann.csv"
 POINT_RADIUS = 10  # radius around gaze point to consider for annotation
-MAX_IMAGES = 90  # Set the maximum number of images to process
+MAX_IMAGES = 2  # Set the maximum number of images to process
 TIME_START = 1730815570.0  # starting timestamp (inclusive)
 TIME_END = 9999999999.0  # ending timestamp (inclusive)
 HEATMAP_PATH = "robotcycle/heatmaps1/"

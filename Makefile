@@ -33,5 +33,5 @@ run:
 	-v /tmp/.X11-unix:/tmp/.X11-unix \
 	-v "${PWD}":/home/appuser/Grounded-SAM-2 \
 	-e DISPLAY=$DISPLAY \
-	--name=gsa \
+	--name=gsa2 \
 	--ipc=host -it grounded_sam2:1.0

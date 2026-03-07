@@ -1,4 +1,4 @@
-FROM pytorch/pytorch:2.3.1-cuda12.1-cudnn8-devel
+FROM pytorch/pytorch:2.0.1-cuda11.7-cudnn8-devel
 
 # Arguments to build Docker Image using CUDA
 ARG USE_CUDA=0
@@ -7,10 +7,13 @@ ARG TORCH_ARCH="7.0;7.5;8.0;8.6"
 ENV AM_I_DOCKER=True
 ENV BUILD_WITH_CUDA="${USE_CUDA}"
 ENV TORCH_CUDA_ARCH_LIST="${TORCH_ARCH}"
-ENV CUDA_HOME=/usr/local/cuda-12.1/
+# ENV CUDA_HOME=/usr/local/cuda-12.1/
+ENV CUDA_HOME=/usr/local/cuda-11.7/
 # Ensure CUDA is correctly set up
-ENV PATH=/usr/local/cuda-12.1/bin:${PATH}
-ENV LD_LIBRARY_PATH=/usr/local/cuda-12.1/lib64:${LD_LIBRARY_PATH}
+ENV PATH=/usr/local/cuda-11.7/bin:${PATH}
+ENV LD_LIBRARY_PATH=/usr/local/cuda-11.7/lib64:${LD_LIBRARY_PATH}
+# ENV PATH=/usr/local/cuda-12.1/bin:${PATH}
+# ENV LD_LIBRARY_PATH=/usr/local/cuda-12.1/lib64:${LD_LIBRARY_PATH}
 
 # Install required packages and specific gcc/g++
 #RUN apt-get update && apt-get install --no-install-recommends wget ffmpeg=7:* \
