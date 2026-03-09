@@ -43,10 +43,15 @@ COPY preprocess_semantics.py sdpa_compat.py /app/
 
 # Overwrite torch with cu113 (compatible with host driver 470.x / CUDA 11.4)
 # PyTorch bundles its own CUDA runtime, so the system CUDA 11.7 toolkit is irrelevant
+# Pin numpy<2.0 (PyTorch 1.12 was compiled against numpy 1.x ABI)
 RUN pip install --force-reinstall \
     torch==1.12.1+cu113 \
     torchvision==0.13.1+cu113 \
+    "numpy>=1.21,<2.0" \
     --extra-index-url https://download.pytorch.org/whl/cu113
+
+# Clean up incompatible leftovers from base image
+RUN pip uninstall -y triton torchdata 2>/dev/null || true
 
 # Install SAM2 (skip CUDA extension — optional for inference)
 ENV SAM2_BUILD_CUDA=0
