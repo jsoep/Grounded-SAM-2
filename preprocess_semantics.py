@@ -8,8 +8,8 @@ Runs Grounding DINO + SAM2 on every frame in the dataset to produce:
 
 Usage (inside Docker container):
     python preprocess_semantics.py --data_root /data_224
-    python preprocess_semantics.py --data_root /data_224 --stride 3 --visualise
-    python preprocess_semantics.py --data_root /data_224 --sequences seq_001 seq_002
+    python preprocess_semantics.py --data_root /data_224 --stride 3 --viz
+    python preprocess_semantics.py --data_root /data_224 --seq seq_001 seq_002
 
 Multi-GPU (2x GPUs):
     python preprocess_semantics.py --data_root /data_224 --num_gpus 2
@@ -256,7 +256,7 @@ def process_sequence(seq_path, sam2_predictor, grounding_model, device, args,
 
     os.makedirs(sem_dir, exist_ok=True)
     os.makedirs(drv_dir, exist_ok=True)
-    if args.visualise:
+    if args.viz:
         vis_dir = os.path.join(seq_path, "semantics_vis")
         os.makedirs(vis_dir, exist_ok=True)
 
@@ -341,7 +341,7 @@ def process_sequence(seq_path, sam2_predictor, grounding_model, device, args,
                 np.save(os.path.join(sem_dir_224, f"{fname}.npy"), label_224)
                 np.save(os.path.join(drv_dir_224, f"{fname}.npy"), drv_224)
 
-            if args.visualise:
+            if args.viz:
                 vis_path = os.path.join(vis_dir, f"{fname}.png")
                 save_visualisation(img_path, label_map, vis_path)
 
@@ -430,8 +430,8 @@ def main():
         sys.exit(1)
 
     # Find sequences
-    if args.sequences:
-        seq_folders = [os.path.join(args.data_root, s) for s in args.sequences]
+    if args.seq:
+        seq_folders = [os.path.join(args.data_root, s) for s in args.seq]
     else:
         seq_folders = sorted([
             os.path.join(args.data_root, d)
@@ -447,7 +447,7 @@ def main():
         print(f"  Also saving 224x224 maps to: {args.data_root_224}")
     print(f"  Sequences: {len(seq_folders)}")
     print(f"  Stride: {args.stride} | Box threshold: {args.box_threshold} | Text threshold: {args.text_threshold}")
-    print(f"  GPUs: {num_gpus} | Visualise: {args.visualise} | Force: {args.force}")
+    print(f"  GPUs: {num_gpus} | Visualise: {args.viz} | Force: {args.force}")
     print()
 
     # Print category -> drivability mapping
