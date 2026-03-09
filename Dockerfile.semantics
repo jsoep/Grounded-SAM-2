@@ -1,9 +1,8 @@
 # Minimal Dockerfile for preprocess_semantics.py
 # Compatible with CUDA 11.4 drivers (NVIDIA 470.x)
 #
-# Uses the Python 3.10 base image for compatibility, but overwrites PyTorch
-# with 1.12.1+cu113 (CUDA 11.3 ≤ 11.4 driver). sdpa_compat.py patches the
-# PyTorch 2.0-only functions SAM2 uses. Full GPU acceleration on RTX 2080 Ti.
+# The base image's conda-installed PyTorch 2.0.1 works with driver 470.x
+# out of the box. We just lower the version pins in setup.py/pyproject.toml.
 #
 # Build:
 #   docker build -f Dockerfile.semantics -t gsam2-semantics .
@@ -15,20 +14,17 @@
 #     -v /path/to/data_224:/data_224 \
 #     gsam2-semantics python preprocess_semantics.py --data_root /data_224 --num_gpus 2
 
-FROM pytorch/pytorch:2.0.1-cuda11.7-cudnn8-devel
+FROM pytorch/pytorch:2.0.1-cuda11.7-cudnn8-runtime
 
 # Prevent interactive prompts
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Europe/London
 
-# Limit threading during build (Docker has restrictive ulimits)
+# Limit threading during build
 ENV PIP_PROGRESS_BAR=off
 ENV PIP_NO_CACHE_DIR=1
-ENV OPENBLAS_NUM_THREADS=1
-ENV MKL_NUM_THREADS=1
-ENV OMP_NUM_THREADS=1
 
-# System deps (base image already has gcc, git, etc.)
+# System deps
 RUN apt-get update \
     && apt-get install -y --no-install-recommends libgl1-mesa-glx libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
@@ -41,22 +37,6 @@ COPY grounding_dino/ /app/grounding_dino/
 COPY setup.py pyproject.toml README.md /app/
 COPY preprocess_semantics.py sdpa_compat.py /app/
 
-# Overwrite torch with cu113 (compatible with host driver 470.x / CUDA 11.4)
-# PyTorch bundles its own CUDA runtime, so the system CUDA 11.7 toolkit is irrelevant
-# Pin numpy<2.0 (PyTorch 1.12 was compiled against numpy 1.x ABI)
-RUN pip install --force-reinstall \
-    torch==1.12.1+cu113 \
-    torchvision==0.13.1+cu113 \
-    numpy==1.21.6 \
-    --extra-index-url https://download.pytorch.org/whl/cu113
-
-# Force PyTorch to use its bundled cu113 runtime, NOT the base image's CUDA 11.7 libs
-# Without this, LD_LIBRARY_PATH points to /usr/local/cuda-11.7 which driver 470.x can't run
-ENV LD_LIBRARY_PATH=""
-
-# Clean up incompatible leftovers from base image
-RUN pip uninstall -y triton torchdata 2>/dev/null || true
-
 # Install SAM2 (skip CUDA extension — optional for inference)
 ENV SAM2_BUILD_CUDA=0
 RUN pip install --no-build-isolation -e .
@@ -64,18 +44,17 @@ RUN pip install --no-build-isolation -e .
 # Install Grounding DINO
 RUN pip install --no-build-isolation -e grounding_dino
 
-# Remaining deps for preprocess_semantics.py
-# numpy pinned to 1.x (PyTorch 1.12 is incompatible with numpy 2.x ABI)
+# Remaining deps
 RUN pip install \
-    numpy==1.21.6 \
     opencv-python-headless \
     supervision \
     pycocotools \
     tqdm \
     transformers \
-    addict
+    addict \
+    yapf \
+    timm
 
-# Verify CUDA works
+# Verify
 RUN python -c "import torch; print(f'PyTorch {torch.__version__}, CUDA: {torch.cuda.is_available()}')"
-# Verify compat shim + SAM2 import works
 RUN python -c "import sdpa_compat; from sam2.build_sam import build_sam2; print('SAM2 import OK')"
