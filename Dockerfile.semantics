@@ -1,9 +1,9 @@
 # Minimal Dockerfile for preprocess_semantics.py
 # Compatible with CUDA 11.4 drivers (NVIDIA 470.x)
 #
-# Uses PyTorch 1.12.1+cu113 (CUDA 11.3 ≤ 11.4 driver) with a compatibility
-# shim (sdpa_compat.py) that patches the PyTorch 2.0-only functions SAM2 uses.
-# This gives full GPU acceleration on RTX 2080 Ti with driver 470.x.
+# Uses the Python 3.10 base image for compatibility, but overwrites PyTorch
+# with 1.12.1+cu113 (CUDA 11.3 ≤ 11.4 driver). sdpa_compat.py patches the
+# PyTorch 2.0-only functions SAM2 uses. Full GPU acceleration on RTX 2080 Ti.
 #
 # Build:
 #   docker build -f Dockerfile.semantics -t gsam2-semantics .
@@ -15,7 +15,7 @@
 #     -v /path/to/data_224:/data_224 \
 #     gsam2-semantics python preprocess_semantics.py --data_root /data_224 --num_gpus 2
 
-FROM pytorch/pytorch:1.12.1-cuda11.3-cudnn8-devel
+FROM pytorch/pytorch:2.0.1-cuda11.7-cudnn8-devel
 
 # Prevent interactive prompts
 ENV DEBIAN_FRONTEND=noninteractive
@@ -41,9 +41,16 @@ COPY grounding_dino/ /app/grounding_dino/
 COPY setup.py pyproject.toml README.md /app/
 COPY preprocess_semantics.py sdpa_compat.py /app/
 
+# Overwrite torch with cu113 (compatible with host driver 470.x / CUDA 11.4)
+# PyTorch bundles its own CUDA runtime, so the system CUDA 11.7 toolkit is irrelevant
+RUN pip install --force-reinstall \
+    torch==1.12.1+cu113 \
+    torchvision==0.13.1+cu113 \
+    --extra-index-url https://download.pytorch.org/whl/cu113
+
 # Install SAM2 (skip CUDA extension — optional for inference)
 ENV SAM2_BUILD_CUDA=0
-RUN pip install -e .
+RUN pip install --no-build-isolation -e .
 
 # Install Grounding DINO
 RUN pip install --no-build-isolation -e grounding_dino
