@@ -18,6 +18,9 @@ The script is resumable: it skips frames that already have a .npy file in semant
 """
 
 import os
+import warnings
+warnings.filterwarnings("ignore", message=".*antialias.*")
+# warnings.filterwarnings("ignore", category=UserWarning)
 import sys
 import glob
 import argparse
@@ -276,16 +279,20 @@ def process_sequence(seq_path, sam2_predictor, grounding_model, device, args):
             print(f"  [{device}] {seq_name}: all {skipped} frames already done, skipping")
         return 0
 
-    # Start prefetch thread
-    file_queue = Queue(maxsize=16)
+    # Start prefetch thread — feed it the work items directly
     result_queue = Queue(maxsize=8)
-    prefetch_thread = Thread(target=prefetch_worker, args=(file_queue, result_queue), daemon=True)
-    prefetch_thread.start()
 
-    # Enqueue all work items
-    for item in work_items:
-        file_queue.put(item)
-    file_queue.put(None)  # poison pill
+    def prefetch_thread_fn():
+        for img_path, fname in work_items:
+            try:
+                image_data = load_image(img_path)
+                result_queue.put((img_path, fname, image_data))
+            except Exception:
+                result_queue.put((img_path, fname, None))
+        result_queue.put(None)  # poison pill
+
+    prefetch_thread = Thread(target=prefetch_thread_fn, daemon=True)
+    prefetch_thread.start()
 
     processed = 0
     pbar = tqdm(total=len(work_items), desc=f"  [{device}] {seq_name}", leave=False)
@@ -344,7 +351,7 @@ def gpu_worker(gpu_id, seq_paths, args, return_dict):
     torch.cuda.set_device(gpu_id)
     
     # AMP setup for this GPU
-    torch.autocast(device_type="cuda", dtype=torch.bfloat16).__enter__()
+    torch.autocast(device_type="cuda", dtype=torch.float16).__enter__()
 
     # Load models on this GPU
     sam2_predictor, grounding_model = build_models(
@@ -454,7 +461,7 @@ def main():
         # ── Single GPU ──
         device = "cuda:0" if torch.cuda.is_available() else "cpu"
         if device.startswith("cuda"):
-            torch.autocast(device_type="cuda", dtype=torch.bfloat16).__enter__()
+            torch.autocast(device_type="cuda", dtype=torch.float16).__enter__()
             print(f"Using CUDA: {torch.cuda.get_device_name(0)}")
         else:
             print("Using CPU (this will be very slow)")
