@@ -53,24 +53,24 @@ CATEGORIES = [
     "vehicle",      # 4  - obstacle (catch-all)
     "cyclist",      # 5  - obstacle
     "pedestrian",   # 6  - obstacle
-    "traffic sign", # 7  - obstacle
-    "building",     # 8  - obstacle
-    "tree",         # 9  - obstacle
+    "building",     # 7  - obstacle
+    "tree",         # 8  - obstacle
+    "bush",         # 9  - obstacle
     "sky",          # 10 - background
 ]
 
 # Drivability score for each class (1.0 = safe, 0.0 = collision)
 DRIVABILITY = {
     "road":         1.0,
-    "sidewalk":     0.3,
+    "sidewalk":     0.0,
     "car":          0.0,
     "bus":          0.0,
     "vehicle":      0.0,
     "cyclist":      0.0,
     "pedestrian":   0.0,
-    "traffic sign": 0.0,
     "building":     0.0,
     "tree":         0.0,
+    "bush":         0.0,
     "sky":          0.5,
 }
 
@@ -194,8 +194,8 @@ def masks_to_labelmap(masks, class_names, confidences, h, w):
         drivability_map[label_map == i] = DRIVABILITY[cat]
 
     # Smooth the drivability map (creates a gradient around obstacles)
-    # Use a kernel size relative to image resolution (e.g. 1/32 of width)
-    ksize = int(w / 32)
+    # Use a kernel size relative to image resolution (e.g. 1/16 of width)
+    ksize = int(w / 16)
     if ksize % 2 == 0:
         ksize += 1
     drivability_map = cv2.GaussianBlur(drivability_map, (ksize, ksize), 0)
@@ -203,7 +203,7 @@ def masks_to_labelmap(masks, class_names, confidences, h, w):
     return label_map, drivability_map.astype(np.float16)
 
 
-def save_visualisation(img_path, label_map, out_path):
+def save_visualisation(img_path, label_map, out_path, image=None):
     """Save a colour-coded overlay of the semantic labels on the original image."""
     PALETTE = {
         0:  (128, 128, 128),  # road - grey
@@ -213,13 +213,22 @@ def save_visualisation(img_path, label_map, out_path):
         4:  (0, 0, 180),      # vehicle - darker red
         5:  (0, 255, 255),    # cyclist - yellow
         6:  (0, 165, 255),    # pedestrian - orange
-        7:  (255, 255, 0),    # traffic sign - cyan
-        8:  (100, 100, 100),  # building - dark grey
-        9:  (0, 180, 0),      # tree - green
+        7:  (100, 100, 100),  # building - dark grey
+        8:  (0, 180, 0),      # tree - green
+        9:  (34, 139, 34),    # bush - forest green
         10: (255, 200, 150),  # sky - light blue
     }
 
-    img = cv2.imread(str(img_path))
+    if image is None:
+        img = cv2.imread(str(img_path))
+    else:
+        img = image.copy()
+        
+    if len(img.shape) == 3 and img.shape[2] == 3:
+        img = cv2.cvtColor(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY), cv2.COLOR_GRAY2BGR)
+    elif len(img.shape) == 2:
+        img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+        
     overlay = np.zeros_like(img)
     for cls_idx, colour in PALETTE.items():
         overlay[label_map == cls_idx] = colour
@@ -228,13 +237,23 @@ def save_visualisation(img_path, label_map, out_path):
     cv2.imwrite(str(out_path), blended)
 
 
-def save_drivability_visualisation(img_path, drivability_map, out_path):
+def save_drivability_visualisation(img_path, drivability_map, out_path, image=None):
     """Save a colour-coded overlay of the drivability map on the original image."""
-    img = cv2.imread(str(img_path))
+    if image is None:
+        img = cv2.imread(str(img_path))
+    else:
+        img = image.copy()
+        
+    if len(img.shape) == 3 and img.shape[2] == 3:
+        img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        img = cv2.cvtColor(img_gray, cv2.COLOR_GRAY2BGR)
+    elif len(img.shape) == 2:
+        img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
     
     # Map drivability [0.0, 1.0] to a colormap (e.g. Jet)
-    # 0.0 (red/obstacles) -> 1.0 (blue/drivable)
-    score_scaled = (drivability_map * 255.0).clip(0, 255).astype(np.uint8)
+    # cv2.COLORMAP_JET: 0 is Blue, 255 is Red.
+    # We want 1.0 (drivable) to be Blue, and 0.0 (obstacle) to be Red, so we invert.
+    score_scaled = ((1.0 - drivability_map) * 255.0).clip(0, 255).astype(np.uint8)
     heatmap = cv2.applyColorMap(score_scaled, cv2.COLORMAP_JET)
     
     # Blend with original image
@@ -291,6 +310,12 @@ def process_sequence(seq_path, sam2_predictor, grounding_model, device, args,
         drv_dir_224 = os.path.join(output_224_seq_path, "drivability")
         os.makedirs(sem_dir_224, exist_ok=True)
         os.makedirs(drv_dir_224, exist_ok=True)
+        
+        if args.viz:
+            sem_vis_dir_224 = os.path.join(output_224_seq_path, "semantics_vis")
+            drv_vis_dir_224 = os.path.join(output_224_seq_path, "drivability_vis")
+            os.makedirs(sem_vis_dir_224, exist_ok=True)
+            os.makedirs(drv_vis_dir_224, exist_ok=True)
 
     img_files = sorted(glob.glob(os.path.join(image_dir, "*.png")))
     
@@ -367,8 +392,18 @@ def process_sequence(seq_path, sam2_predictor, grounding_model, device, args,
             if args.viz:
                 vis_sem_path = os.path.join(sem_vis_dir, f"{fname}_sem.png")
                 vis_drv_path = os.path.join(drv_vis_dir, f"{fname}_drv.png")
-                save_visualisation(img_path, label_map, vis_sem_path)
-                save_drivability_visualisation(img_path, drivability_map, vis_drv_path)
+                
+                # To avoid re-reading the image multiple times, load it once
+                orig_img = cv2.imread(str(img_path))
+                save_visualisation(None, label_map, vis_sem_path, image=orig_img)
+                save_drivability_visualisation(None, drivability_map, vis_drv_path, image=orig_img)
+                
+                if sem_dir_224 and drv_dir_224:
+                    vis_sem_path_224 = os.path.join(sem_vis_dir_224, f"{fname}_sem.png")
+                    vis_drv_path_224 = os.path.join(drv_vis_dir_224, f"{fname}_drv.png")
+                    img_224 = cv2.resize(orig_img, (224, 224), interpolation=cv2.INTER_AREA)
+                    save_visualisation(None, label_224, vis_sem_path_224, image=img_224)
+                    save_drivability_visualisation(None, drv_224, vis_drv_path_224, image=img_224)
 
             processed += 1
         except Exception as e:
