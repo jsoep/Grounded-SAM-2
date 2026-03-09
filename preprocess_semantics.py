@@ -192,6 +192,13 @@ def masks_to_labelmap(masks, class_names, confidences, h, w):
     drivability_map = np.full((h, w), UNLABELLED_DRIVABILITY, dtype=np.float32)
     for i, cat in enumerate(CATEGORIES):
         drivability_map[label_map == i] = DRIVABILITY[cat]
+
+    # Smooth the drivability map (creates a gradient around obstacles)
+    # Use a kernel size relative to image resolution (e.g. 1/32 of width)
+    ksize = int(w / 32)
+    if ksize % 2 == 0:
+        ksize += 1
+    drivability_map = cv2.GaussianBlur(drivability_map, (ksize, ksize), 0)
     
     return label_map, drivability_map.astype(np.float16)
 
@@ -218,6 +225,20 @@ def save_visualisation(img_path, label_map, out_path):
         overlay[label_map == cls_idx] = colour
     
     blended = cv2.addWeighted(img, 0.6, overlay, 0.4, 0)
+    cv2.imwrite(str(out_path), blended)
+
+
+def save_drivability_visualisation(img_path, drivability_map, out_path):
+    """Save a colour-coded overlay of the drivability map on the original image."""
+    img = cv2.imread(str(img_path))
+    
+    # Map drivability [0.0, 1.0] to a colormap (e.g. Jet)
+    # 0.0 (red/obstacles) -> 1.0 (blue/drivable)
+    score_scaled = (drivability_map * 255.0).clip(0, 255).astype(np.uint8)
+    heatmap = cv2.applyColorMap(score_scaled, cv2.COLORMAP_JET)
+    
+    # Blend with original image
+    blended = cv2.addWeighted(img, 0.6, heatmap, 0.4, 0)
     cv2.imwrite(str(out_path), blended)
 
 
@@ -257,8 +278,10 @@ def process_sequence(seq_path, sam2_predictor, grounding_model, device, args,
     os.makedirs(sem_dir, exist_ok=True)
     os.makedirs(drv_dir, exist_ok=True)
     if args.viz:
-        vis_dir = os.path.join(seq_path, "semantics_vis")
-        os.makedirs(vis_dir, exist_ok=True)
+        sem_vis_dir = os.path.join(seq_path, "semantics_vis")
+        drv_vis_dir = os.path.join(seq_path, "drivability_vis")
+        os.makedirs(sem_vis_dir, exist_ok=True)
+        os.makedirs(drv_vis_dir, exist_ok=True)
 
     # Optional 224x224 output directories
     sem_dir_224 = None
@@ -342,8 +365,10 @@ def process_sequence(seq_path, sam2_predictor, grounding_model, device, args,
                 np.save(os.path.join(drv_dir_224, f"{fname}.npy"), drv_224)
 
             if args.viz:
-                vis_path = os.path.join(vis_dir, f"{fname}.png")
-                save_visualisation(img_path, label_map, vis_path)
+                vis_sem_path = os.path.join(sem_vis_dir, f"{fname}_sem.png")
+                vis_drv_path = os.path.join(drv_vis_dir, f"{fname}_drv.png")
+                save_visualisation(img_path, label_map, vis_sem_path)
+                save_drivability_visualisation(img_path, drivability_map, vis_drv_path)
 
             processed += 1
         except Exception as e:
