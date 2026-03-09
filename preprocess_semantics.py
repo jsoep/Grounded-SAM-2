@@ -239,8 +239,12 @@ def prefetch_worker(file_queue, result_queue, max_prefetch=8):
             result_queue.put((img_path, fname, None))
 
 
-def process_sequence(seq_path, sam2_predictor, grounding_model, device, args):
-    """Process all frames in one sequence folder with image prefetching."""
+def process_sequence(seq_path, sam2_predictor, grounding_model, device, args,
+                     output_224_seq_path=None):
+    """Process all frames in one sequence folder with image prefetching.
+    
+    If output_224_seq_path is provided, also saves downscaled 224x224 maps there.
+    """
     seq_name = os.path.basename(seq_path)
     image_dir = os.path.join(seq_path, "images")
     sem_dir = os.path.join(seq_path, "semantics")
@@ -255,6 +259,15 @@ def process_sequence(seq_path, sam2_predictor, grounding_model, device, args):
     if args.visualise:
         vis_dir = os.path.join(seq_path, "semantics_vis")
         os.makedirs(vis_dir, exist_ok=True)
+
+    # Optional 224x224 output directories
+    sem_dir_224 = None
+    drv_dir_224 = None
+    if output_224_seq_path:
+        sem_dir_224 = os.path.join(output_224_seq_path, "semantics")
+        drv_dir_224 = os.path.join(output_224_seq_path, "drivability")
+        os.makedirs(sem_dir_224, exist_ok=True)
+        os.makedirs(drv_dir_224, exist_ok=True)
 
     img_files = sorted(glob.glob(os.path.join(image_dir, "*.png")))
     
@@ -321,6 +334,13 @@ def process_sequence(seq_path, sam2_predictor, grounding_model, device, args):
             np.save(label_path, label_map)
             np.save(drv_path, drivability_map)
 
+            # Save downscaled 224x224 versions if requested
+            if sem_dir_224 and drv_dir_224:
+                label_224 = cv2.resize(label_map, (224, 224), interpolation=cv2.INTER_NEAREST)
+                drv_224 = cv2.resize(drivability_map, (224, 224), interpolation=cv2.INTER_NEAREST)
+                np.save(os.path.join(sem_dir_224, f"{fname}.npy"), label_224)
+                np.save(os.path.join(drv_dir_224, f"{fname}.npy"), drv_224)
+
             if args.visualise:
                 vis_path = os.path.join(vis_dir, f"{fname}.png")
                 save_visualisation(img_path, label_map, vis_path)
@@ -362,16 +382,19 @@ def gpu_worker(gpu_id, seq_paths, args, return_dict):
     total = 0
     for seq_path in seq_paths:
         if os.path.isdir(seq_path):
-            total += process_sequence(seq_path, sam2_predictor, grounding_model, device, args)
+            seq_name = os.path.basename(seq_path)
+            out_224 = os.path.join(args.data_root_224, seq_name) if args.data_root_224 else None
+            total += process_sequence(seq_path, sam2_predictor, grounding_model, device, args,
+                                     output_224_seq_path=out_224)
     
     return_dict[gpu_id] = total
 
 
 def main():
     parser = argparse.ArgumentParser(description="Preprocess semantic segmentation for RobotCycle dataset")
-    parser.add_argument("--data_root", type=str, required=True,
+    parser.add_argument("--data_root", type=str, default="/data",
                         help="Path to dataset root (e.g. /data_224)")
-    parser.add_argument("--sequences", nargs="*", default=None,
+    parser.add_argument("--seq", nargs="*", default=None,
                         help="Specific sequence folders to process (default: all)")
     parser.add_argument("--stride", type=int, default=1,
                         help="Process every Nth frame (default: 1 = all frames)")
@@ -381,10 +404,13 @@ def main():
                         help="Grounding DINO box confidence threshold")
     parser.add_argument("--text_threshold", type=float, default=0.25,
                         help="Grounding DINO text confidence threshold")
-    parser.add_argument("--visualise", action="store_true",
+    parser.add_argument("--viz", action="store_true",
                         help="Save colour-coded overlay images to semantics_vis/")
     parser.add_argument("--force", action="store_true",
                         help="Re-process frames even if output already exists")
+    parser.add_argument("--data_root_224", type=str, default="/data_224",
+                        help="Also save downscaled 224x224 maps here (e.g. /data_224). "
+                             "Same folder structure as data_root.")
     
     # Model paths (defaults match repo structure)
     parser.add_argument("--sam2_checkpoint", type=str,
@@ -417,6 +443,8 @@ def main():
     
     print(f"\nPreprocess Semantics")
     print(f"  Data root: {args.data_root}")
+    if args.data_root_224:
+        print(f"  Also saving 224x224 maps to: {args.data_root_224}")
     print(f"  Sequences: {len(seq_folders)}")
     print(f"  Stride: {args.stride} | Box threshold: {args.box_threshold} | Text threshold: {args.text_threshold}")
     print(f"  GPUs: {num_gpus} | Visualise: {args.visualise} | Force: {args.force}")
@@ -474,8 +502,11 @@ def main():
         total_processed = 0
         for seq_path in seq_folders:
             if os.path.isdir(seq_path):
+                seq_name = os.path.basename(seq_path)
+                out_224 = os.path.join(args.data_root_224, seq_name) if args.data_root_224 else None
                 total_processed += process_sequence(
-                    seq_path, sam2_predictor, grounding_model, device, args
+                    seq_path, sam2_predictor, grounding_model, device, args,
+                    output_224_seq_path=out_224
                 )
 
     elapsed = time.time() - t0
