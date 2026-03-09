@@ -41,13 +41,9 @@ COPY grounding_dino/ /app/grounding_dino/
 COPY setup.py pyproject.toml README.md /app/
 COPY preprocess_semantics.py sdpa_compat.py /app/
 
-# Install SAM2 with --no-deps to bypass the torch>=2.3.1 requirement
-# (our compat shim handles the missing functions)
+# Install SAM2 (skip CUDA extension — optional for inference)
 ENV SAM2_BUILD_CUDA=0
-RUN pip install --no-deps -e .
-
-# Install SAM2's actual runtime deps (minus torch which is already installed)
-RUN pip install hydra-core iopath pillow
+RUN pip install -e .
 
 # Install Grounding DINO
 RUN pip install --no-build-isolation -e grounding_dino
@@ -59,10 +55,7 @@ RUN pip install \
     pycocotools \
     numpy \
     tqdm \
-    transformers \
-    addict \
-    yapf \
-    timm
+    transformers
 
 # Verify CUDA works
 RUN python -c "import torch; print(f'PyTorch {torch.__version__}, CUDA: {torch.cuda.is_available()}')"
