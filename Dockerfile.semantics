@@ -47,7 +47,7 @@ COPY preprocess_semantics.py sdpa_compat.py /app/
 RUN pip install --force-reinstall \
     torch==1.12.1+cu113 \
     torchvision==0.13.1+cu113 \
-    "numpy>=1.21,<2.0" \
+    "numpy==1.21.6" \
     --extra-index-url https://download.pytorch.org/whl/cu113
 
 # Clean up incompatible leftovers from base image
