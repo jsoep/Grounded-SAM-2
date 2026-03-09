@@ -31,6 +31,8 @@ from threading import Thread
 from queue import Queue
 import torch.multiprocessing as mp
 
+import sdpa_compat  # noqa: F401  — patches torch for PyTorch < 2.0 compatibility
+
 from sam2.build_sam import build_sam2
 from sam2.sam2_image_predictor import SAM2ImagePredictor
 from grounding_dino.groundingdino.util.inference import load_model, load_image, predict

@@ -1,0 +1,70 @@
+# Minimal Dockerfile for preprocess_semantics.py
+# Compatible with CUDA 11.4 drivers (NVIDIA 470.x)
+#
+# Uses PyTorch 1.12.1+cu113 (CUDA 11.3 ≤ 11.4 driver) with a compatibility
+# shim (sdpa_compat.py) that patches the PyTorch 2.0-only functions SAM2 uses.
+# This gives full GPU acceleration on RTX 2080 Ti with driver 470.x.
+#
+# Build:
+#   docker build -f Dockerfile.semantics -t gsam2-semantics .
+#
+# Run:
+#   docker run --gpus all \
+#     -v /path/to/checkpoints:/app/checkpoints \
+#     -v /path/to/gdino_checkpoints:/app/gdino_checkpoints \
+#     -v /path/to/data_224:/data_224 \
+#     gsam2-semantics python preprocess_semantics.py --data_root /data_224 --num_gpus 2
+
+FROM pytorch/pytorch:1.12.1-cuda11.3-cudnn8-devel
+
+# Prevent interactive prompts
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=Europe/London
+
+# Limit threading during build (Docker has restrictive ulimits)
+ENV PIP_PROGRESS_BAR=off
+ENV PIP_NO_CACHE_DIR=1
+ENV OPENBLAS_NUM_THREADS=1
+ENV MKL_NUM_THREADS=1
+ENV OMP_NUM_THREADS=1
+
+# System deps (base image already has gcc, git, etc.)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgl1-mesa-glx libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy only what's needed for preprocess_semantics
+COPY sam2/ /app/sam2/
+COPY grounding_dino/ /app/grounding_dino/
+COPY setup.py pyproject.toml README.md /app/
+COPY preprocess_semantics.py sdpa_compat.py /app/
+
+# Install SAM2 with --no-deps to bypass the torch>=2.3.1 requirement
+# (our compat shim handles the missing functions)
+ENV SAM2_BUILD_CUDA=0
+RUN pip install --no-deps -e .
+
+# Install SAM2's actual runtime deps (minus torch which is already installed)
+RUN pip install hydra-core iopath pillow
+
+# Install Grounding DINO
+RUN pip install --no-build-isolation -e grounding_dino
+
+# Remaining deps for preprocess_semantics.py
+RUN pip install \
+    opencv-python-headless \
+    supervision \
+    pycocotools \
+    numpy \
+    tqdm \
+    transformers \
+    addict \
+    yapf \
+    timm
+
+# Verify CUDA works
+RUN python -c "import torch; print(f'PyTorch {torch.__version__}, CUDA: {torch.cuda.is_available()}')"
+# Verify compat shim + SAM2 import works
+RUN python -c "import sdpa_compat; from sam2.build_sam import build_sam2; print('SAM2 import OK')"
