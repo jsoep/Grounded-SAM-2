@@ -47,8 +47,12 @@ COPY preprocess_semantics.py sdpa_compat.py /app/
 RUN pip install --force-reinstall \
     torch==1.12.1+cu113 \
     torchvision==0.13.1+cu113 \
-    "numpy==1.21.6" \
+    numpy==1.21.6 \
     --extra-index-url https://download.pytorch.org/whl/cu113
+
+# Force PyTorch to use its bundled cu113 runtime, NOT the base image's CUDA 11.7 libs
+# Without this, LD_LIBRARY_PATH points to /usr/local/cuda-11.7 which driver 470.x can't run
+ENV LD_LIBRARY_PATH=""
 
 # Clean up incompatible leftovers from base image
 RUN pip uninstall -y triton torchdata 2>/dev/null || true
@@ -61,13 +65,15 @@ RUN pip install --no-build-isolation -e .
 RUN pip install --no-build-isolation -e grounding_dino
 
 # Remaining deps for preprocess_semantics.py
+# numpy pinned to 1.x (PyTorch 1.12 is incompatible with numpy 2.x ABI)
 RUN pip install \
+    numpy==1.21.6 \
     opencv-python-headless \
     supervision \
     pycocotools \
-    numpy \
     tqdm \
-    transformers
+    transformers \
+    addict
 
 # Verify CUDA works
 RUN python -c "import torch; print(f'PyTorch {torch.__version__}, CUDA: {torch.cuda.is_available()}')"
