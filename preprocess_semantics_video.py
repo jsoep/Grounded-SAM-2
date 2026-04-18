@@ -255,7 +255,7 @@ def process_sequence(seq_path, video_predictor, grounding_model, device, args, o
             # 1. Symlink images sequentially so SAM 2 can load them natively
             for idx, img_path in enumerate(chunk):
                 ext = os.path.splitext(img_path)[1]
-                os.symlink(img_path, os.path.join(tmp_vid_dir, f"{idx:05d}{ext}"))
+                os.symlink(os.path.abspath(img_path), os.path.join(tmp_vid_dir, f"{idx:05d}{ext}"))
 
             inference_state = video_predictor.init_state(video_path=tmp_vid_dir)
             
