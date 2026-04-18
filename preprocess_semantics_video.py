@@ -41,7 +41,7 @@ from torchvision.ops import box_convert
 # Expanded ontology for better bounding box anchoring
 # ─────────────────────────────────────────────────────────────
 CATEGORIES = [
-    "asphalt road", # 0  - drivable
+    "road",         # 0  - drivable
     "sidewalk",     # 1  - marginal
     "car",          # 2  - obstacle
     "bus",          # 3  - obstacle
@@ -56,14 +56,13 @@ CATEGORIES = [
     "bush",         # 12 - obstacle
     "sky",          # 13 - background
     "grass",        # 14 - rough terrain / background
-    "dirt path",    # 15 - marginal
-    "pole",         # 16 - obstacle
-    "traffic sign", # 17 - obstacle
+    "pole",         # 15 - obstacle
+    "traffic sign", # 16 - obstacle
 ]
 
 # Drivability score for each class (1.0 = safe, 0.0 = collision)
 DRIVABILITY = {
-    "asphalt road": 1.0,
+    "road":         1.0,
     "sidewalk":     0.0,
     "car":          0.0,
     "bus":          0.0,
@@ -76,15 +75,14 @@ DRIVABILITY = {
     "building":     0.0,
     "tree":         0.0,
     "bush":         0.0,
-    "sky":          0.5,
+    "sky":          0.5,  # ambiguous
     "grass":        0.0,  
-    "dirt path":    0.5,
     "pole":         0.0,
     "traffic sign": 0.0,
 }
 
 UNLABELLED_IDX = 255
-UNLABELLED_DRIVABILITY = 0.5  # ambiguous
+UNLABELLED_DRIVABILITY = 1.0  # don't penalise bad segmentation/labelling
 
 TEXT_PROMPT = ". ".join(CATEGORIES) + "."
 
@@ -137,7 +135,7 @@ def masks_to_labelmap(masks, class_names, confidences, h, w):
 
 
 def save_visualisation(img_path, label_map, out_path, image=None):
-    # Palette maps indices to colors (BGR) for all 18 classes
+    # Palette maps indices to colors (BGR) for all 17 classes
     PALETTE = [
         (128, 128, 128),  # road
         (180, 130, 70),   # sidewalk
@@ -154,7 +152,6 @@ def save_visualisation(img_path, label_map, out_path, image=None):
         (34, 139, 34),    # bush
         (255, 200, 150),  # sky
         (0, 200, 50),     # grass
-        (150, 100, 50),   # dirt path
         (50, 50, 50),     # pole
         (0, 0, 150),      # traffic sign
     ]
