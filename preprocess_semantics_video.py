@@ -345,6 +345,7 @@ def process_sequence(seq_path, video_predictor, grounding_model, device, args, o
 
         finally:
             shutil.rmtree(tmp_vid_dir, ignore_errors=True)
+            torch.cuda.empty_cache()
 
         pbar_seq.update(1)
 
