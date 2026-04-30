@@ -228,10 +228,14 @@ def process_sequence(seq_path, video_predictor, grounding_model, device, args, o
 
     chunks = [img_files[i:i + args.chunk_size] for i in range(0, len(img_files), args.chunk_size)]
     processed = 0
+    total_chunks = len(chunks)
+    failed_chunks = 0
 
-    pbar_seq = tqdm(total=len(chunks), desc=f"[{device}] {seq_name} (Chunks)", leave=False)
+    gpu_id = int(device.split(":")[1]) if ":" in device else 0
+    pbar_seq = tqdm(total=total_chunks, position=gpu_id, leave=True, bar_format="{desc}", file=sys.stdout)
+    pbar_seq.set_description_str(f"[{device}] {seq_name}: processed chunk 0 of {total_chunks}, {failed_chunks} failed")
 
-    for chunk in chunks:
+    for chunk_idx, chunk in enumerate(chunks):
         # Check if entire chunk is already computed
         needs_processing = False
         for img_path in chunk:
@@ -242,13 +246,16 @@ def process_sequence(seq_path, video_predictor, grounding_model, device, args, o
                 
         if not needs_processing:
             processed += len(chunk)
-            pbar_seq.update(1)
+            pbar_seq.set_description_str(f"[{device}] {seq_name}: processed chunk {chunk_idx + 1} of {total_chunks}, {failed_chunks} failed")
             continue
 
         h, w = None, None
         tmp_vid_dir = tempfile.mkdtemp(prefix="sam2_vid_chunk_")
 
         try:
+            old_stderr = sys.stderr
+            sys.stderr = open(os.devnull, 'w')
+
             # 1. Symlink images sequentially so SAM 2 can load them natively
             for idx, img_path in enumerate(chunk):
                 # The .jpg suffix is REQUIRED because SAM2's misc.load_video_frames_from_jpg_images strictly filters for it
@@ -337,14 +344,24 @@ def process_sequence(seq_path, video_predictor, grounding_model, device, args, o
             # Cleanup SAM 2 cache for this chunk to prevent VRAM overflow
             video_predictor.reset_state(inference_state)
 
+            sys.stderr.close()
+            sys.stderr = old_stderr
+
+            pbar_seq.set_description_str(f"[{device}] {seq_name}: processed chunk {chunk_idx + 1} of {total_chunks}, {failed_chunks} failed")
+
         except Exception as e:
-            print(f"  [{device}] Error processing chunk starting at {chunk[0]}: {e}")
+            if 'old_stderr' in locals() and sys.stderr != old_stderr:
+                sys.stderr.close()
+                sys.stderr = old_stderr
+            failed_chunks += 1
+            tqdm.write(f"[{device}] {seq_name}: ERROR processing chunk {chunk_idx + 1} of {total_chunks}: {e}", file=sys.stdout)
 
         finally:
+            if 'old_stderr' in locals() and sys.stderr != old_stderr:
+                sys.stderr.close()
+                sys.stderr = old_stderr
             shutil.rmtree(tmp_vid_dir, ignore_errors=True)
             torch.cuda.empty_cache()
-
-        pbar_seq.update(1)
 
     pbar_seq.close()
     return processed
