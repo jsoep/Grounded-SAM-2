@@ -82,7 +82,7 @@ DRIVABILITY = {
 }
 
 UNLABELLED_IDX = 255
-UNLABELLED_DRIVABILITY = 1.0  # don't penalise bad segmentation/labelling
+UNLABELLED_DRIVABILITY = 0.5  # segmentation should be decent
 
 TEXT_PROMPT = ". ".join(CATEGORIES) + "."
 
