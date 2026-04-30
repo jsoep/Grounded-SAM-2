@@ -382,7 +382,7 @@ def main():
     parser.add_argument("--keyframe_interval", type=int, default=5, help="Frequency of Grounding DINO detection")
     parser.add_argument("--viz", action="store_true")
     parser.add_argument("--force", action="store_true")
-    parser.add_argument("--data_root_224", type=str, default="/data_224")
+    parser.add_argument("--data_root_224", type=str, default=None, help="Optional: also save resized 224x224 maps to this root")
     
     parser.add_argument("--sam2_checkpoint", type=str, default="./checkpoints/sam2.1_hiera_large.pt")
     parser.add_argument("--sam2_config", type=str, default="configs/sam2.1/sam2.1_hiera_l.yaml")
